@@ -366,11 +366,11 @@ class SceneManager {
     }
   }
 
-  addPlayer(playerId, player) {
+  CylinderGeometry(playerId, player) {
     if (this.playerModels[playerId]) return; // Ya existe
     
     // Crear modelo simple del jugador
-    const geometry = new THREE.CapsuleGeometry(0.4, 1.8, 4, 8);
+    const geometry = new THREE.CylinderGeometry(0.4, 1.8, 4, 8);
     const characterColor = GAME_CONFIG.CHARACTERS[player.character]?.color || 0x888888;
     const material = new THREE.MeshLambertMaterial({ color: characterColor });
     const playerMesh = new THREE.Mesh(geometry, material);
