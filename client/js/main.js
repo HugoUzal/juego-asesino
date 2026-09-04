@@ -70,6 +70,10 @@ class Game {
     network.on('onPlayerHit', (data) => this.onPlayerHit(data));
     network.on('onPlayerDied', (data) => this.onPlayerDied(data));
     network.on('onChatMessage', (data) => this.onChatMessage(data));
+    
+    // Nuevos eventos
+    network.on('onYouKilledInnocent', (data) => this.onYouKilledInnocent(data));
+    network.on('onPlayerWounded', (data) => this.onPlayerWounded(data));
     network.on('onPlayerLeft', (data) => this.onPlayerLeft(data));
     network.on('onGameEnded', (data) => this.onGameEnded(data));
   }
@@ -158,7 +162,11 @@ class Game {
     
     // Crear controlador del jugador
     const camera = this.sceneManager.getCamera();
-    this.playerController = new PlayerController(camera, this.sceneManager.getRenderer());
+    const renderer = this.sceneManager.getRenderer();
+    this.playerController = new PlayerController(camera, renderer);
+    
+    // Crear efectos de paranoia
+    this.paranoiaEffects = new ParanoiaEffects(camera, renderer);
     
     // Crear modelos para otros jugadores
     players.forEach(player => {
@@ -181,8 +189,12 @@ class Game {
     const deltaTime = (now - this.lastTime) / 1000;
     this.lastTime = now;
     
+    // Actualizar paranoia
+    this.paranoiaEffects.update(deltaTime);
+    const speedMult = this.paranoiaEffects.getSpeedMultiplier();
+    
     // Actualizar controlador
-    this.playerController.update(deltaTime, Object.values(this.players));
+    this.playerController.update(deltaTime, Object.values(this.players), speedMult);
     
     // Enviar posición
     const state = this.playerController.getState();
@@ -216,21 +228,58 @@ class Game {
   }
 
   onPlayerHit(data) {
-    // Visual feedback
-    console.log(`💥 Golpe: ${data.damage} daño`);
+    console.log(`💥 Golpe: ${data.damage} daño, Heridas: ${data.wounds}`);
     
     if (data.victimId === this.playerId) {
       // Tú fuiste golpeado
       this.addScreenEffect('hit');
+      
+      // Si estás herido
+      if (data.isWounded) {
+        console.log('🩹 Estás herido. Necesitas ayuda!');
+      }
     }
     
     // Actualizar salud
     if (this.players[data.victimId]) {
       this.players[data.victimId].health = data.victimHealth;
+      this.players[data.victimId].wounds = data.wounds;
       
       if (data.victimId === this.playerId) {
-        this.uiElements.healthFill.style.width = `${Math.max(0, data.victimHealth)}%`;
+        const healthPercent = Math.max(0, data.victimHealth);
+        this.uiElements.healthFill.style.width = `${healthPercent}%`;
+        
+        // Cambiar color según salud
+        if (healthPercent > 60) {
+          this.uiElements.healthFill.style.background = 'linear-gradient(90deg, #00ff00, #ffff00)';
+        } else if (healthPercent > 30) {
+          this.uiElements.healthFill.style.background = 'linear-gradient(90deg, #ffff00, #ff6600)';
+        } else {
+          this.uiElements.healthFill.style.background = 'linear-gradient(90deg, #ff6600, #ff0000)';
+        }
       }
+    }
+  }
+
+  onYouKilledInnocent(data) {
+    console.log(`⚠️  MATASTE A UN INOCENTE: ${data.victim}`);
+    this.addScreenEffect('paranoia');
+    if (data.paranoia) {
+      this.paranoiaEffects.activate();
+    }
+  }
+
+  onPlayerWounded(data) {
+    console.log(`🩹 ${data.playerId} está herido`);
+    
+    if (data.playerId === this.playerId) {
+      // Mostrar indicador de herida
+      const woundIndicator = document.createElement('div');
+      woundIndicator.className = 'wound-indicator';
+      woundIndicator.textContent = '🩹 ARRASTRATE O PIDE AYUDA';
+      document.body.appendChild(woundIndicator);
+      
+      setTimeout(() => woundIndicator.remove(), 5000);
     }
   }
 
@@ -289,13 +338,23 @@ class Game {
   }
 
   addScreenEffect(effect) {
-    // Flash rojo o efecto de daño
     const canvas = this.sceneManager.getRenderer().domElement;
-    canvas.style.filter = effect === 'hit' ? 'brightness(0.5)' : 'none';
     
-    setTimeout(() => {
-      canvas.style.filter = 'none';
-    }, 200);
+    if (effect === 'hit') {
+      // Flash rojo
+      canvas.style.filter = 'brightness(0.5) saturate(2)';
+      setTimeout(() => {
+        canvas.style.filter = 'none';
+      }, 200);
+    } else if (effect === 'paranoia') {
+      // Parpadeo rojo intenso
+      canvas.style.filter = 'brightness(0.7) hue-rotate(10deg)';
+      for (let i = 0; i < 5; i++) {
+        setTimeout(() => {
+          canvas.style.filter = i % 2 === 0 ? 'brightness(0.7)' : 'brightness(1)';
+        }, i * 100);
+      }
+    }
   }
 }
 

@@ -20,6 +20,8 @@ class NetworkManager {
     this.socket.on('chat-message', (data) => this.onChatMessage(data));
     this.socket.on('player-left', (data) => this.onPlayerLeft(data));
     this.socket.on('game-ended', (data) => this.onGameEnded(data));
+    this.socket.on('you-killed-innocent', (data) => this.onYouKilledInnocent(data));
+    this.socket.on('player-wounded', (data) => this.onPlayerWounded(data));
     this.socket.on('error', (data) => this.onError(data));
   }
 
@@ -128,6 +130,20 @@ class NetworkManager {
     console.log('🏁 ¡JUEGO TERMINADO!');
     if (this.callbacks.onGameEnded) {
       this.callbacks.onGameEnded(data);
+    }
+  }
+
+  onYouKilledInnocent(data) {
+    console.log(`⚠️  MATASTE INOCENTE: ${data.victim}`);
+    if (this.callbacks.onYouKilledInnocent) {
+      this.callbacks.onYouKilledInnocent(data);
+    }
+  }
+
+  onPlayerWounded(data) {
+    console.log(`🩹 Jugador herido: ${data.playerId}`);
+    if (this.callbacks.onPlayerWounded) {
+      this.callbacks.onPlayerWounded(data);
     }
   }
 

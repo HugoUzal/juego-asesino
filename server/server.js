@@ -2,6 +2,7 @@ const express = require('express');
 const http = require('http');
 const socketIo = require('socket.io');
 const path = require('path');
+const { GameLogic } = require('./game-logic');
 
 const app = express();
 const server = http.createServer(app);
@@ -33,6 +34,9 @@ const gameState = {
   assassin: null,
   gameStartTime: null,
 };
+
+// GAME LOGIC
+const gameLogic = new GameLogic();
 
 // PERSONAJES DISPONIBLES
 const CHARACTERS = [
@@ -133,31 +137,54 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Validar distancia (proximidad)
-    const dist = distance(attacker.position, victim.position);
-    if (dist > 5) return; // 5m de rango máximo
+    // Validar distancia
+    if (!gameLogic.canPlayerAttack(attacker, victim)) {
+      return;
+    }
 
     // Procesar daño
-    const damage = data.damage || 10;
-    victim.health = Math.max(0, victim.health - damage);
+    const result = gameLogic.processDamage(attacker, victim, data.weaponType);
 
-    console.log(`[ATAQUE] ${attacker.username} golpea a ${victim.username} (${damage} daño)`);
+    if (!result) return;
 
+    // Broadcast ataque
     io.emit('player-hit', {
       attackerId: socket.id,
       victimId: data.victimId,
-      damage: damage,
-      victimHealth: victim.health,
-      weaponType: data.weaponType
+      damage: result.damage,
+      victimHealth: result.victim.health,
+      wounds: result.victim.wounds,
+      weaponType: data.weaponType,
+      isWounded: result.victim.wounds > 0 && result.victim.wounds < 3
     });
 
-    // Validar si víctima murió
-    if (victim.health <= 0) {
-      victim.isAlive = false;
+    // Si mató a inocente sin ser asesino, aplicar paranoia
+    if (result.isDead && !attacker.isAssassin) {
+      io.to(socket.id).emit('you-killed-innocent', {
+        victim: victim.username,
+        paranoia: true
+      });
+    }
+
+    // Si víctima está herida (cuchillo)
+    if (result.victim.wounds === 1 || result.victim.wounds === 2) {
+      io.emit('player-wounded', {
+        playerId: data.victimId,
+        wounds: result.victim.wounds,
+        canCrawl: true
+      });
+    }
+
+    // Si murió
+    if (result.isDead) {
+      attacker.stats = attacker.stats || {};
+      attacker.stats.kills = (attacker.stats.kills || 0) + 1;
+
       io.emit('player-died', {
         victimId: data.victimId,
         attackerId: socket.id,
-        cause: data.weaponType
+        cause: data.weaponType,
+        assasinKills: attacker.stats.kills
       });
 
       checkGameEnd();

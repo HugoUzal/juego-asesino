@@ -10,6 +10,7 @@ class PlayerController {
     this.mouseX = 0;
     this.mouseY = 0;
     this.isLocked = false;
+    this.mouseDown = false;
     
     // Estado del jugador
     this.position = new THREE.Vector3(0, 1.6, 0);
@@ -44,10 +45,24 @@ class PlayerController {
     // Mouse
     document.addEventListener('mousemove', (e) => this.onMouseMove(e));
     document.addEventListener('click', () => this.requestPointerLock());
+    document.addEventListener('mousedown', (e) => this.onMouseDown(e));
+    document.addEventListener('mouseup', (e) => this.onMouseUp(e));
     document.addEventListener('pointerlockchange', () => this.onPointerLockChange());
     
     // Prevenir scroll por defecto
     document.addEventListener('wheel', (e) => e.preventDefault(), { passive: false });
+  }
+
+  onMouseDown(e) {
+    if (e.button === 0) { // Click izquierdo
+      this.mouseDown = true;
+    }
+  }
+
+  onMouseUp(e) {
+    if (e.button === 0) {
+      this.mouseDown = false;
+    }
   }
 
   onKeyDown(e) {
@@ -112,7 +127,7 @@ class PlayerController {
     console.log(`📷 Vista: ${this.cameraMode}`);
   }
 
-  update(deltaTime, otherPlayers = []) {
+  update(deltaTime, otherPlayers = [], paranoiaMultiplier = 1) {
     if (!this.isLocked) return;
     
     // Movimiento horizontal
@@ -133,13 +148,23 @@ class PlayerController {
     if (this.keys['a']) moveVector.add(right.multiplyScalar(-1));
     if (this.keys['d']) moveVector.add(right);
     
+    // Aplicar paranoia zigzag
+    const zigzag = window.paranoidZigzag ? {
+      x: (Math.random() - 0.5) * window.paranoidZigzag,
+      z: (Math.random() - 0.5) * window.paranoidZigzag
+    } : { x: 0, z: 0 };
+    
+    moveVector.x += zigzag.x;
+    moveVector.z += zigzag.z;
+    
     if (moveVector.length() > 0) {
       moveVector.normalize();
-      moveVector.multiplyScalar(this.speed * deltaTime);
+      let currentSpeed = this.speed * paranoiaMultiplier;
+      moveVector.multiplyScalar(currentSpeed * deltaTime);
       this.position.add(moveVector);
     }
     
-    // Gravity simple (para futuro: implementar saltos)
+    // Gravity
     this.velocity.y += this.gravity * deltaTime;
     this.position.y += this.velocity.y * deltaTime;
     
@@ -149,7 +174,7 @@ class PlayerController {
       this.velocity.y = 0;
     }
     
-    // Colisiones básicas (mantener dentro del mapa)
+    // Colisiones básicas
     const mapSize = 100;
     this.position.x = Math.max(-mapSize, Math.min(mapSize, this.position.x));
     this.position.z = Math.max(-mapSize, Math.min(mapSize, this.position.z));
@@ -158,7 +183,7 @@ class PlayerController {
     if (this.cameraMode === 'first-person') {
       this.camera.position.copy(this.position);
     } else {
-      // Third person - seguir desde atrás
+      // Third person
       const offset = new THREE.Vector3();
       this.camera.getWorldDirection(offset);
       offset.y = 0;
@@ -171,14 +196,13 @@ class PlayerController {
         0.1
       );
       
-      // Mirar al jugador
       this.camera.lookAt(this.position);
     }
     
     // Detectar clics (ataques)
-    if (this.keys['click']) {
+    if (this.mouseDown) {
       this.tryAttack(otherPlayers);
-      this.keys['click'] = false;
+      this.mouseDown = false;
     }
   }
 
