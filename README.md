@@ -1,38 +1,108 @@
-# 🔪 JUEGO ASESINO - Multiplayer Thriller
+# 🔪 JUEGO ASESINO - Multiplayer Psychological Thriller
 
 ## Descripción
 
-Juego psicológico multijugador estilo **Among Us + Counter-Strike + Sherlock Holmes**. Un asesino oculto debe eliminar a todos los inocentes mientras estos intentan descubrirlo y capturarlo.
+Juego psicológico multijugador estilo **Among Us + Counter-Strike + Sherlock Holmes** en **3D en tiempo real**. Un asesino oculto debe eliminar a todos los inocentes mientras estos intentan descubrirlo y capturarlo.
 
-**Máximo 12 jugadores**
+**Máximo 12 jugadores | Multimapas | Efectos Visuales y Sonoros**
 
-## 🎮 Características
+**ESTADO: ✅ FASE 4 COMPLETADA - LISTO PARA JUGAR**
 
-- ✅ 1 Asesino vs 11 Inocentes
-- ✅ Sistema de daño (golpes, cuchillo, arma de fuego)
-- ✅ Paranoia visual tras matar accidentalmente
-- ✅ Chat en tiempo real
-- ✅ 5 mapas diferentes (Times Square, Mezquita Azul, Plaza Mayor, Castillo, La Boca)
-- ✅ Dos vistas de cámara (Primera y tercera persona)
-- ✅ Progresión del asesino con kills
-- ✅ Sistema de curación y heridas
+## 🎮 Características Implementadas
+
+### 🎯 CORE GAMEPLAY
+- ✅ 1 Asesino vs 11 Inocentes (assignment aleatorio)
+- ✅ Asesino conoce su rol, inocentes NO
+- ✅ Sistema de daño realista:
+  - Puños: 6 golpes para matar
+  - Cuchillo: 1-2 heridas (crawling 2 min), 3+ muerte
+  - Pistola: Disparo = muerte instantánea (5 balas)
+
+### 🎬 PARANOIA & PSYCHOLOGY
+- ✅ Paranoia visual tras matar inocente (5 minutos):
+  - Bordes rojos
+  - Visión oscura
+  - 4 comportamientos aleatorios (zigzag, tremor, speed-fluctuation, look-back)
+- ✅ Herida por cuchillo: 2 minutos arrastrándose antes de morir
+- ✅ Sistema de ayuda: Otro jugador cura en 10 segundos (-30% velocidad permanente)
+
+### 🗺️ MAPAS (5 escenarios 200x200m)
+- ✅ Times Square (NYC) - Edificios, banners, puntos de cobertura
+- ✅ Mezquita Azul (Estambul) - Estructura dómica, minaretes
+- ✅ Plaza Mayor (Madrid) - Patios abiertos, arquitectura
+- ✅ Castillo de Edimburgo - Muros, torres, puerta principal
+- ✅ La Boca (Buenos Aires) - Casas coloridas, techos, faroles
+
+### 🎮 CONTROLES & CÁMARA
+- ✅ WASD - Movimiento fluido
+- ✅ Mouse - Mirar en 360°
+- ✅ E - Toggle FPS/TPS
+- ✅ ESPACIO - Correr
+- ✅ CLICK - Atacar
+- ✅ T - Chat (escribe mientras quieto)
+
+### 💬 COMUNICACIÓN & UI
+- ✅ Chat en tiempo real (sincronizado por red)
+- ✅ HUD dinámico con:
+  - Barra de salud (colores según HP)
+  - Contador de jugadores vivos
+  - Display de arma actual
+  - Rol visible (Asesino/Inocente)
+  - Mapa actual
+- ✅ Notificaciones emergentes contextuales
+- ✅ Indicadores de estado (herida, paranoia)
+
+### 🎵 AUDIO & EFECTOS
+- ✅ Sonidos procedurales (Web Audio API):
+  - Impactos según arma
+  - Sonido de muerte
+  - Paranoia alert
+  - Fanfarra de inicio/fin
+- ✅ Screen effects:
+  - Flash rojo en daño
+  - Bordes rojos en paranoia
+  - Vignette (visión oscura)
+  - Parpadeo en baja salud
+
+### 🔧 NETWORKING & SERVER
+- ✅ Socket.IO para sincronización real-time
+- ✅ Gestión de estado del servidor
+- ✅ Asignación aleatoria de asesino
+- ✅ Eventos de ataque/muerte sincronizados
+- ✅ Detección de LOS (proximidad 50m)
+
+### ⭐ PROGRESIÓN & BALANCING
+- ✅ Asesino:
+  - 1 kill → +20% velocidad
+  - 3 kills → +40% velocidad
+  - 5 kills → +50% velocidad + +20% daño
+- ✅ Inocente:
+  - Paranoia tras matar
+  - Debuff permanente si se curan (-30% velocidad)
+
+## ✨ Características NO IMPLEMENTADAS (aún)
+- ⏳ Congelamiento/Prisión (preso mode)
+- ⏳ Sistema de espectador mejorado
+- ⏳ Modelos 3D detallados de avatares (ahora capsulas)
+- ⏳ Build de Electron (instalable)
+- ⏳ Servidor online deployado
+- ⏳ Sistema de puntuación/rankings
 
 ## 📋 Requisitos
 
 - **Node.js** 16+ ([descargar](https://nodejs.org/))
 - **npm** (viene con Node.js)
 
-## 🚀 Instalación & Ejecución
+## 🚀 Instalación & Ejecución (3 pasos)
 
-### 1. Instalar dependencias
+### 1️⃣ Preparar el servidor
 
 ```bash
-cd ~/juego-asesino
-cd server
-npm install
+cd ~/juego-asesino/server
+npm install  # Instala dependencias (solo primera vez)
 ```
 
-### 2. Iniciar el servidor
+### 2️⃣ Iniciar el servidor
 
 ```bash
 npm start
@@ -43,24 +113,27 @@ Deberías ver:
 🎮 SERVIDOR ASESINO INICIADO EN http://localhost:3000
 ```
 
-### 3. Abrir el cliente
+### 3️⃣ Abrir en navegador
 
-Abre tu navegador y ve a:
+Abre **múltiples navegadores/pestañas incógnito** en:
 ```
 http://localhost:3000
 ```
 
-O si está en tu red local:
-```
-http://[TU_IP]:3000
-```
+### 4️⃣ ¡Juega!
 
-### 4. ¡Jugar!
+1. **Ingresa tu nombre** y **elige personaje**
+2. Haz clic en **"UNIRSE A LA SALA"**
+3. Espera a otros jugadores (mínimo 2, máximo 12)
+4. El primer jugador puede hacer clic en **"INICIAR JUEGO"**
+5. **¡Se inicia el juego!** - Se asigna un asesino aleatorio
 
-- Ingresa tu nombre y elige un personaje
-- Haz clic en "UNIRSE A LA SALA"
-- Espera a otros jugadores (mínimo 2)
-- El primero que se une puede hacer click en "INICIAR JUEGO"
+### 💡 TIPS
+
+- **Para probar rápido:** Abre 4-5 pestañas incógnito en el mismo navegador
+- **Con amigos:** Comparte `http://[TU_IP]:3000` (reemplaza con tu IP local)
+- **Cambiar mapa:** Elige en el dropdown antes de unirse
+- **Sonido:** El audio se activa automáticamente (Web Audio API)
 
 ## 🎯 Controles
 
