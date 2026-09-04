@@ -9,6 +9,8 @@ class Game {
     this.localPlayer = null;
     this.playerController = null;
     this.sceneManager = null;
+    this.hud = new HUDSystem();
+    this.hud.addStyles();
     
     // UI
     this.uiElements = {
@@ -144,11 +146,14 @@ class Game {
     this.uiElements.lobby.style.display = 'none';
     this.uiElements.hud.style.display = 'block';
     
-    // Mostrar rol
-    this.uiElements.roleDisplay.textContent = this.isAssassin ? 'ASESINO 🔪' : 'Inocente';
-    if (this.isAssassin) {
-      this.uiElements.roleDisplay.style.color = '#ff3300';
-    }
+    // Actualizar HUD
+    this.hud.updateRole(this.isAssassin);
+    this.hud.updateMap(data.map);
+    this.hud.showNotification(
+      this.isAssassin ? '🔪 ERES EL ASESINO 🔪' : '👤 ERES INOCENTE',
+      this.isAssassin ? 'assassin' : 'info',
+      5000
+    );
     
     // Inicializar escena 3D
     this.initializeGame(data.map, data.players);
@@ -212,7 +217,12 @@ class Game {
 
   updateHUD() {
     const aliveCount = Object.values(this.players).filter(p => p.isAlive).length;
-    this.uiElements.playerCount.textContent = aliveCount;
+    this.hud.updatePlayerCount(aliveCount, Object.keys(this.players).length);
+
+    // Actualizar salud del jugador local
+    if (this.localPlayer) {
+      this.hud.updateHealth(this.localPlayer.health);
+    }
   }
 
   onPlayerMoved(data) {
@@ -264,8 +274,18 @@ class Game {
   onYouKilledInnocent(data) {
     console.log(`⚠️  MATASTE A UN INOCENTE: ${data.victim}`);
     this.addScreenEffect('paranoia');
+    
     if (data.paranoia) {
       this.paranoiaEffects.activate();
+      this.hud.showNotification(
+        `⚠️  MATASTE A ${data.victim.toUpperCase()} ⚠️`,
+        'error',
+        8000
+      );
+      this.hud.showParanoiaIndicator();
+      
+      // Remover indicador después de 5 minutos
+      setTimeout(() => this.hud.removeParanoiaIndicator(), 300000);
     }
   }
 
@@ -273,27 +293,42 @@ class Game {
     console.log(`🩹 ${data.playerId} está herido`);
     
     if (data.playerId === this.playerId) {
-      // Mostrar indicador de herida
-      const woundIndicator = document.createElement('div');
-      woundIndicator.className = 'wound-indicator';
-      woundIndicator.textContent = '🩹 ARRASTRATE O PIDE AYUDA';
-      document.body.appendChild(woundIndicator);
-      
-      setTimeout(() => woundIndicator.remove(), 5000);
+      this.hud.showNotification(
+        '🩹 ESTÁS HERIDO - ARRASTRATE O PIDE AYUDA',
+        'error',
+        10000
+      );
+      this.hud.showWoundedState();
     }
   }
 
   onPlayerDied(data) {
-    console.log(`💀 ${this.players[data.victimId]?.username} murió`);
+    const victim = this.players[data.victimId];
+    const attacker = this.players[data.attackerId];
+    
+    console.log(`💀 ${victim?.username} murió por ${attacker?.username}`);
     
     if (this.players[data.victimId]) {
       this.players[data.victimId].isAlive = false;
     }
     
+    // Mostrar notificación
+    this.hud.showNotification(
+      `💀 ${victim?.username} ha muerto`,
+      'warning',
+      3000
+    );
+    
     if (data.victimId === this.playerId) {
       // Tú moriste - modo espectador
       this.playerController.isLocked = false;
       this.gameRunning = false;
+      this.hud.showNotification(
+        '💀 HAS MUERTO - Ahora eres ESPECTADOR',
+        'error',
+        5000
+      );
+      this.hud.removeWoundedState();
     } else {
       // Remover modelo
       this.sceneManager.removePlayer(data.victimId);

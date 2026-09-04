@@ -88,20 +88,78 @@ class SceneManager {
   }
 
   createTimesSquare() {
-    // Edificios simple
-    for (let i = 0; i < 5; i++) {
-      const buildingGeometry = new THREE.BoxGeometry(20, 30 + Math.random() * 20, 15);
+    // Edificios grandes con ventanas
+    for (let i = 0; i < 6; i++) {
+      const height = 30 + Math.random() * 30;
+      const width = 20 + Math.random() * 15;
+      const depth = 15 + Math.random() * 10;
+      
+      const buildingGeometry = new THREE.BoxGeometry(width, height, depth);
       const buildingMaterial = new THREE.MeshLambertMaterial({
-        color: new THREE.Color().setHSL(Math.random(), 0.3, 0.5)
+        color: new THREE.Color().setHSL(Math.random() * 0.1 + 0.05, 0.4, 0.5)
       });
       const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
-      building.position.set(
-        -50 + i * 25,
-        15,
-        -30 + Math.random() * 20
-      );
+      
+      const x = -60 + (i % 3) * 40;
+      const z = -40 + Math.floor(i / 3) * 40;
+      
+      building.position.set(x, height / 2, z);
       building.castShadow = true;
+      building.receiveShadow = true;
       this.scene.add(building);
+
+      // Añadir algunas luces internas
+      const windowLight = new THREE.PointLight(0xffff99, 0.3, 30);
+      windowLight.position.set(x, height * 0.3, z + depth / 2 + 2);
+      this.scene.add(windowLight);
+    }
+
+    // Banners y carteles digitales
+    for (let i = 0; i < 4; i++) {
+      const bannerGeometry = new THREE.BoxGeometry(15, 8, 1);
+      const bannerMaterial = new THREE.MeshLambertMaterial({
+        color: 0xff3333,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.3
+      });
+      const banner = new THREE.Mesh(bannerGeometry, bannerMaterial);
+      banner.position.set(-60 + i * 40, 25, 50);
+      banner.castShadow = true;
+      this.scene.add(banner);
+    }
+
+    // Áreas de descanso/tiendas
+    for (let i = 0; i < 8; i++) {
+      const shopGeometry = new THREE.BoxGeometry(10, 5, 10);
+      const shopMaterial = new THREE.MeshLambertMaterial({
+        color: 0x333333
+      });
+      const shop = new THREE.Mesh(shopGeometry, shopMaterial);
+      
+      const angle = (i / 8) * Math.PI * 2;
+      shop.position.set(
+        Math.cos(angle) * 50,
+        2.5,
+        Math.sin(angle) * 50
+      );
+      shop.castShadow = true;
+      this.scene.add(shop);
+    }
+
+    // Puntos de cobertura (árboles/kioscos)
+    for (let i = 0; i < 5; i++) {
+      const coverGeometry = new THREE.ConeGeometry(8, 15, 8);
+      const coverMaterial = new THREE.MeshLambertMaterial({
+        color: 0x228B22
+      });
+      const cover = new THREE.Mesh(coverGeometry, coverMaterial);
+      cover.position.set(
+        -40 + Math.random() * 80,
+        7.5,
+        -40 + Math.random() * 80
+      );
+      cover.castShadow = true;
+      this.scene.add(cover);
     }
   }
 
@@ -146,39 +204,165 @@ class SceneManager {
   }
 
   createEdinburghCastle() {
-    // Muros del castillo
-    const wallGeometry = new THREE.BoxGeometry(100, 15, 5);
-    const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
-    const wall = new THREE.Mesh(wallGeometry, wallMaterial);
-    wall.position.y = 7.5;
-    wall.castShadow = true;
-    this.scene.add(wall);
+    // Muros del castillo (4 lados)
+    const wallGeometry = new THREE.BoxGeometry(100, 20, 4);
+    const wallMaterial = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
     
-    // Torre central
-    const towerGeometry = new THREE.ConeGeometry(10, 50, 16);
-    const towerMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
-    const tower = new THREE.Mesh(towerGeometry, towerMaterial);
-    tower.position.y = 25;
-    tower.castShadow = true;
-    this.scene.add(tower);
+    const walls = [
+      { pos: [0, 10, -50], rot: 0 },
+      { pos: [0, 10, 50], rot: 0 },
+      { pos: [-50, 10, 0], rot: Math.PI / 2 },
+      { pos: [50, 10, 0], rot: Math.PI / 2 }
+    ];
+
+    walls.forEach(w => {
+      const wall = new THREE.Mesh(wallGeometry, wallMaterial);
+      wall.position.set(...w.pos);
+      wall.rotation.y = w.rot;
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      this.scene.add(wall);
+    });
+
+    // Torres en las esquinas
+    const towers = [
+      { pos: [-50, 0, -50] },
+      { pos: [50, 0, -50] },
+      { pos: [-50, 0, 50] },
+      { pos: [50, 0, 50] }
+    ];
+
+    towers.forEach(t => {
+      const towerGeometry = new THREE.CylinderGeometry(8, 10, 40, 16);
+      const towerMaterial = new THREE.MeshLambertMaterial({ color: 0x4a4a4a });
+      const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+      tower.position.set(...t.pos);
+      tower.castShadow = true;
+      this.scene.add(tower);
+
+      // Techo cónico
+      const roofGeometry = new THREE.ConeGeometry(10, 8, 16);
+      const roofMaterial = new THREE.MeshLambertMaterial({ color: 0x2a2a2a });
+      const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+      roof.position.set(t.pos[0], 24, t.pos[2]);
+      roof.castShadow = true;
+      this.scene.add(roof);
+    });
+
+    // Torre central principal
+    const mainTowerGeometry = new THREE.CylinderGeometry(12, 15, 50, 16);
+    const mainTowerMaterial = new THREE.MeshLambertMaterial({ color: 0x3a3a3a });
+    const mainTower = new THREE.Mesh(mainTowerGeometry, mainTowerMaterial);
+    mainTower.position.y = 25;
+    mainTower.castShadow = true;
+    this.scene.add(mainTower);
+
+    // Bandera en la torre
+    const flagGeometry = new THREE.PlaneGeometry(8, 6);
+    const flagMaterial = new THREE.MeshLambertMaterial({ color: 0x0066cc });
+    const flag = new THREE.Mesh(flagGeometry, flagMaterial);
+    flag.position.set(15, 50, 0);
+    flag.castShadow = true;
+    this.scene.add(flag);
+
+    // Puerta principal
+    const gateGeometry = new THREE.BoxGeometry(6, 15, 1);
+    const gateMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+    const gate = new THREE.Mesh(gateGeometry, gateMaterial);
+    gate.position.set(0, 7.5, -50.5);
+    gate.castShadow = true;
+    this.scene.add(gate);
+
+    // Parapetos (decorativo)
+    for (let i = -40; i < 41; i += 10) {
+      const battlementGeometry = new THREE.BoxGeometry(4, 6, 2);
+      const battlementMaterial = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
+      const battlement = new THREE.Mesh(battlementGeometry, battlementMaterial);
+      battlement.position.set(i, 20, -50);
+      this.scene.add(battlement);
+    }
   }
 
   createLaBoca() {
-    // Casas coloridas random
-    for (let i = 0; i < 10; i++) {
-      const houseGeometry = new THREE.BoxGeometry(10, 12, 10);
-      const colors = [0xff6b6b, 0xee5a6f, 0xc92a2a, 0xf08c00, 0xff6b35, 0x004e89];
-      const randomColor = colors[Math.floor(Math.random() * colors.length)];
-      const houseMaterial = new THREE.MeshLambertMaterial({ color: randomColor });
-      const house = new THREE.Mesh(houseGeometry, houseMaterial);
+    const colors = [0xff6b6b, 0xee5a6f, 0xc92a2a, 0xf08c00, 0xff6b35, 0x004e89, 0xffa500, 0xff1493];
+    
+    // Casas coloridas en grid
+    const gridSize = 4;
+    const spacing = 25;
+    
+    for (let x = 0; x < gridSize; x++) {
+      for (let z = 0; z < gridSize; z++) {
+        const posX = -37.5 + x * spacing;
+        const posZ = -37.5 + z * spacing;
+        
+        // Casa principal
+        const houseHeight = 10 + Math.random() * 8;
+        const houseGeometry = new THREE.BoxGeometry(12, houseHeight, 12);
+        const randomColor = colors[Math.floor(Math.random() * colors.length)];
+        const houseMaterial = new THREE.MeshLambertMaterial({ color: randomColor });
+        const house = new THREE.Mesh(houseGeometry, houseMaterial);
+        
+        house.position.set(posX, houseHeight / 2, posZ);
+        house.castShadow = true;
+        house.receiveShadow = true;
+        this.scene.add(house);
+
+        // Techo rojo
+        const roofGeometry = new THREE.ConeGeometry(9, 4, 4);
+        const roofMaterial = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+        const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+        roof.position.set(posX, houseHeight + 2, posZ);
+        roof.castShadow = true;
+        this.scene.add(roof);
+
+        // Puerta
+        const doorGeometry = new THREE.BoxGeometry(2, 4, 0.5);
+        const doorMaterial = new THREE.MeshLambertMaterial({ color: 0x8B4513 });
+        const door = new THREE.Mesh(doorGeometry, doorMaterial);
+        door.position.set(posX, 2, posZ + 6.25);
+        this.scene.add(door);
+
+        // Balcón decorativo
+        const balconyGeometry = new THREE.BoxGeometry(14, 1, 2);
+        const balconyMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+        const balcony = new THREE.Mesh(balconyGeometry, balconyMaterial);
+        balcony.position.set(posX, houseHeight * 0.6, posZ + 6.5);
+        this.scene.add(balcony);
+      }
+    }
+
+    // Calle con textura
+    const streetGeometry = new THREE.PlaneGeometry(100, 100);
+    const streetMaterial = new THREE.MeshLambertMaterial({ color: 0x442200 });
+    const street = new THREE.Mesh(streetGeometry, streetMaterial);
+    street.rotation.x = -Math.PI / 2;
+    street.position.y = -0.1;
+    street.receiveShadow = true;
+    this.scene.add(street);
+
+    // Faroles
+    for (let i = 0; i < 6; i++) {
+      const lampGeometry = new THREE.CylinderGeometry(1, 1, 15, 8);
+      const lampMaterial = new THREE.MeshLambertMaterial({ color: 0x333333 });
+      const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
       
-      house.position.set(
-        -40 + Math.random() * 80,
-        6,
-        -40 + Math.random() * 80
+      const angle = (i / 6) * Math.PI * 2;
+      lamp.position.set(
+        Math.cos(angle) * 45,
+        7.5,
+        Math.sin(angle) * 45
       );
-      house.castShadow = true;
-      this.scene.add(house);
+      lamp.castShadow = true;
+      this.scene.add(lamp);
+
+      // Luz del farol
+      const lampLight = new THREE.PointLight(0xffff99, 0.6, 30);
+      lampLight.position.set(
+        Math.cos(angle) * 45,
+        15,
+        Math.sin(angle) * 45
+      );
+      this.scene.add(lampLight);
     }
   }
 
