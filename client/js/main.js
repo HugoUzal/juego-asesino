@@ -142,6 +142,9 @@ class Game {
     
     console.log(`🎬 JUEGO INICIADO - Eres ${this.isAssassin ? 'ASESINO' : 'INOCENTE'}`);
     
+    // Sonido de inicio
+    audio.playGameStart();
+    
     // Esconder lobby
     this.uiElements.lobby.style.display = 'none';
     this.uiElements.hud.style.display = 'block';
@@ -240,6 +243,15 @@ class Game {
   onPlayerHit(data) {
     console.log(`💥 Golpe: ${data.damage} daño, Heridas: ${data.wounds}`);
     
+    // Sonido según tipo de arma
+    if (data.weaponType === 'punch') {
+      audio.playHitSound(data.damage / 50);
+    } else if (data.weaponType === 'knife') {
+      audio.playSlashSound();
+    } else if (data.weaponType === 'gun') {
+      audio.playGunshot();
+    }
+    
     if (data.victimId === this.playerId) {
       // Tú fuiste golpeado
       this.addScreenEffect('hit');
@@ -247,6 +259,7 @@ class Game {
       // Si estás herido
       if (data.isWounded) {
         console.log('🩹 Estás herido. Necesitas ayuda!');
+        audio.playWoundSound();
       }
     }
     
@@ -273,6 +286,10 @@ class Game {
 
   onYouKilledInnocent(data) {
     console.log(`⚠️  MATASTE A UN INOCENTE: ${data.victim}`);
+    
+    // Sonido de paranoia
+    audio.playParanoiaSound();
+    
     this.addScreenEffect('paranoia');
     
     if (data.paranoia) {
@@ -307,6 +324,9 @@ class Game {
     const attacker = this.players[data.attackerId];
     
     console.log(`💀 ${victim?.username} murió por ${attacker?.username}`);
+    
+    // Sonido de muerte
+    audio.playDeathSound();
     
     if (this.players[data.victimId]) {
       this.players[data.victimId].isAlive = false;
@@ -361,6 +381,9 @@ class Game {
     
     const isWinner = (data.winner === 'ASSASSIN' && this.isAssassin) ||
                      (data.winner === 'INNOCENTS' && !this.isAssassin);
+    
+    // Sonido de fin
+    audio.playGameEnd(isWinner);
     
     // Mostrar pantalla de fin
     this.uiElements.gameOver.style.display = 'flex';
