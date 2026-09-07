@@ -366,7 +366,7 @@ class SceneManager {
     }
   }
 
-  CylinderGeometry(playerId, player) {
+  addPlayer(playerId, player) {
     if (this.playerModels[playerId]) return; // Ya existe
     
     // Crear modelo simple del jugador
