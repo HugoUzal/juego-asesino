@@ -182,6 +182,7 @@ class Game {
         this.sceneManager.addPlayer(player.id, player);
       } else {
         this.playerController.setPosition(new THREE.Vector3().copy(player.position));
+        this.sceneManager.setLocalPlayer(player.character, player.username);
       }
     });
     
@@ -203,7 +204,16 @@ class Game {
     
     // Actualizar controlador
     this.playerController.update(deltaTime, Object.values(this.players), speedMult);
-    
+
+    // Animar personajes (propio y remotos)
+    this.sceneManager.updateAnimations(deltaTime);
+    this.sceneManager.updateLocalPlayer(
+      this.playerController.position,
+      this.playerController.rotation.y,
+      this.playerController.isMoving(),
+      this.playerController.cameraMode
+    );
+
     // Enviar posición
     const state = this.playerController.getState();
     network.sendMovement(state.position, state.rotation);

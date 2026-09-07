@@ -26,8 +26,8 @@ class PlayerController {
     
     // Cámara
     this.cameraMode = 'third-person'; // 'first-person' o 'third-person'
-    this.cameraDistance = 3;
-    this.cameraHeight = 1;
+    this.cameraDistance = 5.5;
+    this.cameraHeight = 2.2;
     
     // Cooldowns
     this.lastAttackTime = 0;
@@ -239,6 +239,10 @@ class PlayerController {
       position: this.position,
       rotation: this.rotation
     };
+  }
+
+  isMoving() {
+    return this.isLocked && (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']);
   }
 
   setPosition(pos) {
