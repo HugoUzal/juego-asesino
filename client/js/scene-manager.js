@@ -307,6 +307,8 @@ class SceneManager {
       this.createEdinburghCastle();
     } else if (mapName === 'la-boca') {
       this.createLaBoca();
+    } else if (mapName === 'city') {
+      this.createCity();
     }
   }
 
@@ -635,12 +637,178 @@ class SceneManager {
     }
   }
 
+  _getRoadLineTexture() {
+    if (this._textureCache.roadLine) return this._textureCache.roadLine;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 64;
+    canvas.height = 16;
+    const ctx = canvas.getContext('2d');
+    // Fondo transparente + segmento amarillo (línea discontinua)
+    ctx.fillStyle = '#e8c93a';
+    ctx.fillRect(4, 6, 34, 4);
+
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+    this._textureCache.roadLine = texture;
+    return texture;
+  }
+
+  createCity() {
+    const blockPitch = 60; // distancia entre centros de manzana
+    const blockSize = 40; // tamaño de vereda+edificio por manzana
+    const sidewalkColor = 0x9a9a92;
+    const buildingPalette = [0xc0704a, 0x8a9bb0, 0xb5a45c, 0xd6906a, 0x7fa88a, 0xa2795c, 0xc9c2a0, 0xb08a9a];
+
+    let colorIndex = 0;
+    const positions = [-1, 0, 1];
+
+    for (const gx of positions) {
+      for (const gz of positions) {
+        const cx = gx * blockPitch;
+        const cz = gz * blockPitch;
+
+        if (gx === 0 && gz === 0) {
+          this._createCityPlaza(cx, cz);
+          continue;
+        }
+
+        // Vereda
+        const sidewalkGeo = new THREE.PlaneGeometry(blockSize, blockSize);
+        const sidewalkMat = new THREE.MeshLambertMaterial({ color: sidewalkColor });
+        const sidewalk = new THREE.Mesh(sidewalkGeo, sidewalkMat);
+        sidewalk.rotation.x = -Math.PI / 2;
+        sidewalk.position.set(cx, 0.02, cz);
+        sidewalk.receiveShadow = true;
+        this.scene.add(sidewalk);
+
+        // Edificio con fachada variada
+        const width = 22 + Math.random() * 8;
+        const depth = 22 + Math.random() * 8;
+        const height = 14 + Math.random() * 26;
+        const cols = Math.max(4, Math.round(width / 3));
+        const rows = Math.max(5, Math.round(height / 4));
+        const baseColor = buildingPalette[colorIndex % buildingPalette.length];
+        colorIndex++;
+        const facade = this._getFacadeTexture(cols, rows, baseColor, 0x2a2a30, 0xffe9a8);
+
+        const buildingGeo = new THREE.BoxGeometry(width, height, depth);
+        const buildingMat = new THREE.MeshLambertMaterial({ map: facade });
+        const building = new THREE.Mesh(buildingGeo, buildingMat);
+        building.position.set(cx, height / 2, cz);
+        building.castShadow = true;
+        building.receiveShadow = true;
+        this.scene.add(building);
+        this._addCollider(cx, cz, width / 2, depth / 2);
+
+        // Farol en la esquina de la manzana
+        const lampGeometry = new THREE.CylinderGeometry(0.3, 0.3, 8, 6);
+        const lampMaterial = new THREE.MeshLambertMaterial({ color: 0x2b2b2b });
+        const lamp = new THREE.Mesh(lampGeometry, lampMaterial);
+        lamp.position.set(cx - blockSize / 2 + 2, 4, cz - blockSize / 2 + 2);
+        lamp.castShadow = true;
+        this.scene.add(lamp);
+
+        const lampLight = new THREE.PointLight(0xffe9a8, 0.5, 20);
+        lampLight.position.set(lamp.position.x, 8, lamp.position.z);
+        this.scene.add(lampLight);
+      }
+    }
+
+    // Líneas de calle pintadas (cruce principal)
+    const roadLineH = this._tileTexture(this._getRoadLineTexture(), 25, 1);
+    const roadLineMatH = new THREE.MeshBasicMaterial({ map: roadLineH, transparent: true });
+    const lineGeo = new THREE.PlaneGeometry(200, 1);
+
+    const lineH = new THREE.Mesh(lineGeo, roadLineMatH);
+    lineH.rotation.x = -Math.PI / 2;
+    lineH.position.y = 0.03;
+    this.scene.add(lineH);
+
+    const roadLineV = this._tileTexture(this._getRoadLineTexture(), 25, 1);
+    const roadLineMatV = new THREE.MeshBasicMaterial({ map: roadLineV, transparent: true });
+    const lineV = new THREE.Mesh(lineGeo, roadLineMatV);
+    lineV.rotation.x = -Math.PI / 2;
+    lineV.rotation.z = Math.PI / 2;
+    lineV.position.y = 0.03;
+    this.scene.add(lineV);
+  }
+
+  _createCityPlaza(cx, cz) {
+    // Fuente central
+    const basinGeo = new THREE.CylinderGeometry(8, 8.5, 1, 20);
+    const basinMat = new THREE.MeshLambertMaterial({ color: 0x8a97a5 });
+    const basin = new THREE.Mesh(basinGeo, basinMat);
+    basin.position.set(cx, 0.5, cz);
+    basin.castShadow = true;
+    basin.receiveShadow = true;
+    this.scene.add(basin);
+    this._addCollider(cx, cz, 8.5, 8.5);
+
+    const waterGeo = new THREE.CylinderGeometry(7, 7, 0.3, 20);
+    const waterMat = new THREE.MeshLambertMaterial({ color: 0x3a7bd5 });
+    const water = new THREE.Mesh(waterGeo, waterMat);
+    water.position.set(cx, 1.05, cz);
+    this.scene.add(water);
+
+    const jetGeo = new THREE.CylinderGeometry(0.4, 0.6, 3, 8);
+    const jetMat = new THREE.MeshLambertMaterial({ color: 0xb0b8c0 });
+    const jet = new THREE.Mesh(jetGeo, jetMat);
+    jet.position.set(cx, 2.5, cz);
+    this.scene.add(jet);
+
+    // Torre del reloj
+    const towerX = cx + 16;
+    const towerZ = cz + 16;
+    const towerGeo = new THREE.BoxGeometry(4, 26, 4);
+    const towerMat = new THREE.MeshLambertMaterial({
+      map: this._tileTexture(this._getBrickTexture(0xb08968, 0x6b4a35), 2, 8)
+    });
+    const tower = new THREE.Mesh(towerGeo, towerMat);
+    tower.position.set(towerX, 13, towerZ);
+    tower.castShadow = true;
+    this.scene.add(tower);
+    this._addCollider(towerX, towerZ, 2, 2);
+
+    const clockFaceGeo = new THREE.CircleGeometry(1.6, 16);
+    const clockFaceMat = new THREE.MeshBasicMaterial({ color: 0xfff8e0, side: THREE.DoubleSide });
+    [0, Math.PI / 2, Math.PI, -Math.PI / 2].forEach(angle => {
+      const face = new THREE.Mesh(clockFaceGeo, clockFaceMat);
+      face.position.set(towerX + Math.sin(angle) * 2.05, 24, towerZ + Math.cos(angle) * 2.05);
+      face.rotation.y = angle;
+      this.scene.add(face);
+    });
+
+    // Árboles alrededor de la plaza
+    for (let i = 0; i < 6; i++) {
+      const angle = (i / 6) * Math.PI * 2;
+      const x = cx + Math.cos(angle) * 16;
+      const z = cz + Math.sin(angle) * 16;
+      if (Math.abs(x - towerX) < 4 && Math.abs(z - towerZ) < 4) continue;
+
+      const trunkGeometry = new THREE.CylinderGeometry(0.6, 0.8, 3, 8);
+      const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x5a3d24 });
+      const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
+      trunk.position.set(x, 1.5, z);
+      trunk.castShadow = true;
+      this.scene.add(trunk);
+
+      const coverGeometry = new THREE.ConeGeometry(4, 7, 8);
+      const coverMaterial = new THREE.MeshLambertMaterial({ color: 0x2e8b57 });
+      const cover = new THREE.Mesh(coverGeometry, coverMaterial);
+      cover.position.set(x, 3 + 3.5, z);
+      cover.castShadow = true;
+      this.scene.add(cover);
+    }
+  }
+
   // ==========================================================
   // PERSONAJES (low-poly tipo "muñeco de bloques" animado)
   // ==========================================================
 
   _createCharacterMesh(characterId, username) {
     const clothColor = GAME_CONFIG.CHARACTERS[characterId]?.color ?? 0x888888;
+    const outfit = GAME_CONFIG.CHARACTERS[characterId]?.outfit ?? {};
     const skinColor = 0xE8B894;
 
     const legHeight = 0.8, legW = 0.28, legD = 0.28;
@@ -707,6 +875,12 @@ class SceneManager {
     head.castShadow = true;
     group.add(head);
 
+    // Vestuario distintivo por personaje
+    this._applyOutfit(group, outfit, {
+      torsoW, torsoD, torsoHeight, legHeight,
+      headSize, headY: head.position.y, shoulderY, shoulderL, shoulderR
+    });
+
     // Etiqueta de nombre
     const label = this._createNameLabel(username);
     label.position.y = head.position.y + 0.55;
@@ -716,6 +890,166 @@ class SceneManager {
       mesh: group,
       parts: { hipL, hipR, shoulderL, shoulderR }
     };
+  }
+
+  _applyOutfit(group, outfit, dims) {
+    const { torsoW, torsoD, torsoHeight, legHeight, headSize, headY, shoulderY, shoulderL, shoulderR } = dims;
+    const accent = outfit.accent ?? 0xffffff;
+    const accentMat = new THREE.MeshLambertMaterial({ color: accent });
+    const torsoFrontZ = torsoD / 2 + 0.02;
+    const torsoCenterY = legHeight + torsoHeight / 2;
+
+    switch (outfit.type) {
+      case 'suit': {
+        const tie = new THREE.Mesh(new THREE.BoxGeometry(0.12, torsoHeight * 0.7, 0.03), accentMat);
+        tie.position.set(0, torsoCenterY + 0.05, torsoFrontZ);
+        group.add(tie);
+        break;
+      }
+
+      case 'dress':
+      case 'gown': {
+        const skirtHeight = legHeight * 0.75;
+        const skirt = new THREE.Mesh(
+          new THREE.CylinderGeometry(torsoW / 2, torsoW / 2 + 0.3, skirtHeight, 10),
+          accentMat
+        );
+        skirt.position.y = skirtHeight / 2 + legHeight * 0.1;
+        skirt.castShadow = true;
+        group.add(skirt);
+
+        if (outfit.headwear === 'veil') {
+          const veil = new THREE.Mesh(
+            new THREE.PlaneGeometry(0.5, 0.6),
+            new THREE.MeshLambertMaterial({ color: accent, transparent: true, opacity: 0.85, side: THREE.DoubleSide })
+          );
+          veil.position.set(0, headY, -headSize / 2 - 0.02);
+          group.add(veil);
+        }
+        break;
+      }
+
+      case 'labcoat': {
+        const badge = new THREE.Mesh(
+          new THREE.PlaneGeometry(0.12, 0.12),
+          new THREE.MeshBasicMaterial({ color: accent, side: THREE.DoubleSide })
+        );
+        badge.position.set(0.15, torsoCenterY + 0.1, torsoFrontZ);
+        group.add(badge);
+        break;
+      }
+
+      case 'uniform': {
+        const epauletteGeo = new THREE.BoxGeometry(0.3, 0.08, 0.28);
+        const epL = new THREE.Mesh(epauletteGeo, accentMat);
+        epL.position.set(shoulderL.position.x, shoulderY + 0.04, 0);
+        group.add(epL);
+        const epR = new THREE.Mesh(epauletteGeo, accentMat);
+        epR.position.set(shoulderR.position.x, shoulderY + 0.04, 0);
+        group.add(epR);
+
+        for (let i = 0; i < 3; i++) {
+          const medal = new THREE.Mesh(new THREE.SphereGeometry(0.035, 6, 6), accentMat);
+          medal.position.set(-0.15 + i * 0.15, torsoCenterY + 0.15, torsoFrontZ);
+          group.add(medal);
+        }
+
+        if (outfit.headwear === 'cap') {
+          const cap = new THREE.Mesh(
+            new THREE.CylinderGeometry(headSize * 0.55, headSize * 0.55, 0.12, 12),
+            accentMat
+          );
+          cap.position.set(0, headY + headSize / 2 + 0.06, 0);
+          group.add(cap);
+        }
+        break;
+      }
+
+      case 'robe': {
+        if (outfit.headwear === 'scarf') {
+          const scarf = new THREE.Mesh(
+            new THREE.ConeGeometry(headSize * 0.55, 0.4, 10),
+            new THREE.MeshLambertMaterial({ color: accent })
+          );
+          scarf.position.set(0, headY + headSize * 0.35, 0);
+          group.add(scarf);
+        }
+        break;
+      }
+
+      case 'maid': {
+        const apron = new THREE.Mesh(
+          new THREE.PlaneGeometry(torsoW * 0.7, torsoHeight * 0.85),
+          new THREE.MeshLambertMaterial({ color: accent, side: THREE.DoubleSide })
+        );
+        apron.position.set(0, torsoCenterY - 0.03, torsoFrontZ);
+        group.add(apron);
+
+        if (outfit.headwear === 'maidcap') {
+          const cap = new THREE.Mesh(
+            new THREE.BoxGeometry(headSize * 0.5, 0.08, headSize * 0.3),
+            new THREE.MeshLambertMaterial({ color: accent })
+          );
+          cap.position.set(0, headY + headSize / 2 + 0.04, -headSize * 0.1);
+          group.add(cap);
+        }
+        break;
+      }
+
+      case 'tweed': {
+        if (outfit.headwear === 'glasses') {
+          const glasses = new THREE.Mesh(
+            new THREE.BoxGeometry(headSize * 0.7, 0.05, 0.03),
+            new THREE.MeshBasicMaterial({ color: accent })
+          );
+          glasses.position.set(0, headY + 0.02, headSize / 2 + 0.01);
+          group.add(glasses);
+        }
+        break;
+      }
+
+      case 'overalls': {
+        const strapGeo = new THREE.BoxGeometry(0.1, torsoHeight, 0.05);
+        const strapL = new THREE.Mesh(strapGeo, accentMat);
+        strapL.position.set(-0.18, torsoCenterY, torsoFrontZ);
+        group.add(strapL);
+        const strapR = new THREE.Mesh(strapGeo, accentMat);
+        strapR.position.set(0.18, torsoCenterY, torsoFrontZ);
+        group.add(strapR);
+
+        if (outfit.headwear === 'sunhat') {
+          const brim = new THREE.Mesh(
+            new THREE.CylinderGeometry(headSize * 0.9, headSize * 0.9, 0.05, 14),
+            new THREE.MeshLambertMaterial({ color: accent })
+          );
+          brim.position.set(0, headY + headSize / 2 + 0.03, 0);
+          group.add(brim);
+        }
+        break;
+      }
+
+      case 'trench': {
+        if (outfit.headwear === 'fedora') {
+          const hatTop = new THREE.Mesh(
+            new THREE.CylinderGeometry(headSize * 0.4, headSize * 0.4, 0.22, 10),
+            new THREE.MeshLambertMaterial({ color: accent })
+          );
+          hatTop.position.set(0, headY + headSize / 2 + 0.15, 0);
+          group.add(hatTop);
+
+          const brim = new THREE.Mesh(
+            new THREE.CylinderGeometry(headSize * 0.75, headSize * 0.75, 0.04, 14),
+            new THREE.MeshLambertMaterial({ color: accent })
+          );
+          brim.position.set(0, headY + headSize / 2 + 0.05, 0);
+          group.add(brim);
+        }
+        break;
+      }
+
+      default:
+        break;
+    }
   }
 
   _createNameLabel(username) {

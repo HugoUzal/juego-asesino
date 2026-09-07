@@ -42,23 +42,24 @@ const GAME_CONFIG = {
     'blue-mosque': { name: 'Mezquita Azul', size: 200 },
     'plaza-mayor': { name: 'Plaza Mayor', size: 200 },
     'edinburgh-castle': { name: 'Castillo de Edimburgo', size: 200 },
-    'la-boca': { name: 'La Boca', size: 200 }
+    'la-boca': { name: 'La Boca', size: 200 },
+    'city': { name: 'Ciudad', size: 200 }
   },
-  
-  // Personajes
+
+  // Personajes (outfit define accesorios visuales extra sobre el modelo base)
   CHARACTERS: {
-    1: { name: 'Lord Arthur Sterling', color: 0x1a1a2e },
-    2: { name: 'Lady Evelyn Thorne', color: 0x16213e },
-    3: { name: 'Dr. Alistair Vance', color: 0x0f3460 },
-    4: { name: 'Madame Blanche DuBois', color: 0xe94560 },
-    5: { name: 'Coronel Reginald Pike', color: 0x533483 },
-    6: { name: 'Madame Cassandra', color: 0x2d3436 },
-    7: { name: 'Sra. Margaret Croft', color: 0x636e72 },
-    8: { name: 'Thomas Pendelton', color: 0x2c3e50 },
-    9: { name: 'Scarlet Monet', color: 0xe74c3c },
-    10: { name: 'Prof. Julian Wright', color: 0x8e44ad },
-    11: { name: 'Silas Thorne', color: 0x27ae60 },
-    12: { name: 'Clara Higgins', color: 0xf39c12 }
+    1: { name: 'Lord Arthur Sterling', color: 0x1a1a2e, outfit: { type: 'suit', accent: 0xa8202e } },
+    2: { name: 'Lady Evelyn Thorne', color: 0x16213e, outfit: { type: 'dress', accent: 0x0d0d1a, headwear: 'veil' } },
+    3: { name: 'Dr. Alistair Vance', color: 0xe9edf2, outfit: { type: 'labcoat', accent: 0xcc2222 } },
+    4: { name: 'Madame Blanche DuBois', color: 0xe94560, outfit: { type: 'gown', accent: 0xffd700 } },
+    5: { name: 'Coronel Reginald Pike', color: 0x2f3b2f, outfit: { type: 'uniform', accent: 0xd4af37, headwear: 'cap' } },
+    6: { name: 'Madame Cassandra', color: 0x4a235a, outfit: { type: 'robe', accent: 0x9b59b6, headwear: 'scarf' } },
+    7: { name: 'Sra. Margaret Croft', color: 0x2c2c2c, outfit: { type: 'maid', accent: 0xffffff, headwear: 'maidcap' } },
+    8: { name: 'Thomas Pendelton', color: 0x2c3e50, outfit: { type: 'suit', accent: 0x1a1a1a } },
+    9: { name: 'Scarlet Monet', color: 0xe74c3c, outfit: { type: 'gown', accent: 0xffffff } },
+    10: { name: 'Prof. Julian Wright', color: 0x7d6449, outfit: { type: 'tweed', accent: 0x222222, headwear: 'glasses' } },
+    11: { name: 'Silas Thorne', color: 0x556b2f, outfit: { type: 'overalls', accent: 0x4a6fa5, headwear: 'sunhat' } },
+    12: { name: 'Clara Higgins', color: 0xc9a66b, outfit: { type: 'trench', accent: 0x8a6d3b, headwear: 'fedora' } }
   }
 };
 
