@@ -33,7 +33,34 @@ const gameState = {
   map: 'times-square', // map actual
   assassin: null,
   gameStartTime: null,
+  weapons: {}, // armas tiradas en el mapa, disponibles para recoger
 };
+
+// Puntos donde pueden aparecer armas en el mapa "city" (calles/plaza, lejos de edificios)
+const WEAPON_SPAWN_POINTS = [
+  { x: 0, z: -10, type: 'gun' },
+  { x: -10, z: 5, type: 'knife' },
+  { x: 10, z: -5, type: 'knife' },
+  { x: -40, z: -40, type: 'gun' },
+  { x: 40, z: -40, type: 'knife' },
+  { x: -40, z: 40, type: 'gun' },
+  { x: 40, z: 40, type: 'knife' },
+  { x: 0, z: 40, type: 'knife' },
+  { x: 0, z: -40, type: 'gun' },
+  { x: -40, z: 0, type: 'knife' },
+  { x: 40, z: 0, type: 'gun' },
+];
+
+// Escasez de armas según cantidad de jugadores: con 2 jugadores no hay
+// "misterio" real, así que ambos quedan armados para defenderse. Con más
+// jugadores, las armas escasean para mantener la incertidumbre de Among Us.
+function getWeaponCount(playerCount) {
+  if (playerCount <= 2) return playerCount;
+  if (playerCount <= 4) return 3;
+  if (playerCount <= 6) return 4;
+  if (playerCount <= 9) return 5;
+  return 6;
+}
 
 // GAME LOGIC
 const gameLogic = new GameLogic();
@@ -128,6 +155,33 @@ io.on('connection', (socket) => {
     startGame(data.map || 'times-square');
   });
 
+  // EVENTO: RECOGER ARMA
+  socket.on('pickup-weapon', (data) => {
+    const player = gameState.players[socket.id];
+    const weapon = gameState.weapons[data.weaponId];
+
+    if (!player || !weapon || !player.isAlive || player.weapon) {
+      return;
+    }
+
+    // Validar que esté cerca del arma (autoritativo en servidor)
+    if (distance(player.position, weapon.position) > 3) {
+      return;
+    }
+
+    player.weapon = weapon.type;
+    player.ammo = weapon.type === 'gun' ? 5 : 0;
+    delete gameState.weapons[data.weaponId];
+
+    console.log(`[ARMA] ${player.username} recogió ${weapon.type}`);
+
+    io.emit('weapon-picked-up', {
+      weaponId: data.weaponId,
+      playerId: socket.id,
+      weaponType: weapon.type
+    });
+  });
+
   // EVENTO: ATAQUE/DAÑO
   socket.on('player-attack', (data) => {
     const attacker = gameState.players[socket.id];
@@ -137,13 +191,26 @@ io.on('connection', (socket) => {
       return;
     }
 
-    // Validar distancia
-    if (!gameLogic.canPlayerAttack(attacker, victim)) {
+    if (attacker.id === victim.id) {
+      return; // no autolesión
+    }
+
+    // El arma y la munición las decide el servidor, no el cliente
+    const weaponType = attacker.weapon || 'punch';
+
+    // Validar distancia: la pistola tiene alcance real, cuerpo a cuerpo no
+    const attackRange = weaponType === 'gun' ? 25 : 5;
+    if (!gameLogic.canPlayerAttack(attacker, victim, attackRange)) {
       return;
     }
 
+    if (weaponType === 'gun') {
+      if (!attacker.ammo || attacker.ammo <= 0) return;
+      attacker.ammo -= 1;
+    }
+
     // Procesar daño
-    const result = gameLogic.processDamage(attacker, victim, data.weaponType);
+    const result = gameLogic.processDamage(attacker, victim, weaponType);
 
     if (!result) return;
 
@@ -154,7 +221,8 @@ io.on('connection', (socket) => {
       damage: result.damage,
       victimHealth: result.victim.health,
       wounds: result.victim.wounds,
-      weaponType: data.weaponType,
+      weaponType: weaponType,
+      attackerAmmo: attacker.ammo,
       isWounded: result.victim.wounds > 0 && result.victim.wounds < 3
     });
 
@@ -183,7 +251,7 @@ io.on('connection', (socket) => {
       io.emit('player-died', {
         victimId: data.victimId,
         attackerId: socket.id,
-        cause: data.weaponType,
+        cause: weaponType,
         assasinKills: attacker.stats.kills
       });
 
@@ -235,11 +303,10 @@ function startGame(mapName) {
   const assassinId = playerIds[assassinIndex];
 
   gameState.assassin = assassinId;
-  gameState.players[assassinId].isAssassin = true;
 
   console.log(`[JUEGO] Iniciando en ${mapName}. Asesino: ${gameState.players[assassinId].username}`);
 
-  // Reasignar posiciones (spawn points)
+  // Reasignar posiciones (spawn points) y resetear estado de cada jugador
   Object.values(gameState.players).forEach((player, idx) => {
     const spawnPoint = getSpawnPoint(idx, mapName);
     player.position = spawnPoint;
@@ -247,13 +314,29 @@ function startGame(mapName) {
     player.isAlive = true;
     player.isParanoid = false;
     player.isFrozen = false;
+    player.isAssassin = player.id === assassinId;
+    player.weapon = null;
+    player.ammo = 0;
   });
 
-  // Notificar a todos
+  // Repartir armas por el mapa: escasas si hay muchos jugadores
+  gameState.weapons = {};
+  const weaponCount = getWeaponCount(playerIds.length);
+  const shuffledSpots = [...WEAPON_SPAWN_POINTS].sort(() => Math.random() - 0.5).slice(0, weaponCount);
+  shuffledSpots.forEach((spot, i) => {
+    const weaponId = `w${i}_${Date.now()}`;
+    gameState.weapons[weaponId] = {
+      id: weaponId,
+      type: spot.type,
+      position: { x: spot.x, y: 1, z: spot.z }
+    };
+  });
+
+  // Notificar a todos (cada jugador ya sabe su propio rol leyendo su entrada en "players")
   io.emit('game-started', {
     map: mapName,
     players: Object.values(gameState.players),
-    isAssassin: (playerId) => playerId === assassinId // Cada cliente sabrá su rol
+    weapons: Object.values(gameState.weapons)
   });
 
   // Cambiar a estado PLAYING
@@ -293,8 +376,11 @@ function distance(p1, p2) {
 function checkGameEnd() {
   const alivePlayers = Object.values(gameState.players).filter(p => p.isAlive);
   const assassinAlive = gameState.players[gameState.assassin]?.isAlive;
+  // "alivePlayers.length === 0" nunca pasaba mientras el asesino siguiera
+  // vivo (lo normal): había que contar los INOCENTES vivos, no a todos.
+  const innocentsAlive = alivePlayers.filter(p => !p.isAssassin);
 
-  if (alivePlayers.length === 0 || !assassinAlive) {
+  if (innocentsAlive.length === 0 || !assassinAlive) {
     endGame();
   }
 }

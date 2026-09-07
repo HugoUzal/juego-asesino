@@ -14,6 +14,7 @@ class SceneManager {
     this.EYE_HEIGHT = 1.6; // Debe coincidir con PlayerController
     this._textureCache = {};
     this.colliders = []; // Cajas (AABB en XZ) de edificios/obstáculos sólidos
+    this.weaponPickups = {}; // Armas tiradas en el mapa, disponibles para recoger
 
     this.setup();
   }
@@ -821,10 +822,12 @@ class SceneManager {
 
     const group = new THREE.Group();
 
-    // Piernas (pivote en la cadera para poder animarlas)
+    // Piernas: cilindros levemente cónicos en vez de cajas (menos "Minecraft")
+    const legGeo = new THREE.CylinderGeometry(legW * 0.42, legW * 0.55, legHeight, 8);
+
     const hipL = new THREE.Group();
     hipL.position.set(-0.18, legHeight, 0);
-    const legMeshL = new THREE.Mesh(new THREE.BoxGeometry(legW, legHeight, legD), clothMat);
+    const legMeshL = new THREE.Mesh(legGeo, clothMat);
     legMeshL.position.y = -legHeight / 2;
     legMeshL.castShadow = true;
     hipL.add(legMeshL);
@@ -832,24 +835,28 @@ class SceneManager {
 
     const hipR = new THREE.Group();
     hipR.position.set(0.18, legHeight, 0);
-    const legMeshR = new THREE.Mesh(new THREE.BoxGeometry(legW, legHeight, legD), clothMat);
+    const legMeshR = new THREE.Mesh(legGeo, clothMat);
     legMeshR.position.y = -legHeight / 2;
     legMeshR.castShadow = true;
     hipR.add(legMeshR);
     group.add(hipR);
 
-    // Torso
-    const torso = new THREE.Mesh(new THREE.BoxGeometry(torsoW, torsoHeight, torsoD), clothMat);
+    // Torso: cilindro (más ancho de hombros que de cadera)
+    const torso = new THREE.Mesh(
+      new THREE.CylinderGeometry(torsoW * 0.5, torsoW * 0.42, torsoHeight, 10),
+      clothMat
+    );
     torso.position.y = legHeight + torsoHeight / 2;
     torso.castShadow = true;
     group.add(torso);
 
-    // Brazos (pivote en el hombro)
+    // Brazos (pivote en el hombro), también cilíndricos
     const shoulderY = legHeight + torsoHeight;
+    const armGeo = new THREE.CylinderGeometry(armW * 0.4, armW * 0.5, armHeight, 8);
 
     const shoulderL = new THREE.Group();
     shoulderL.position.set(-(torsoW / 2 + armW / 2), shoulderY, 0);
-    const armMeshL = new THREE.Mesh(new THREE.BoxGeometry(armW, armHeight, armD), skinMat);
+    const armMeshL = new THREE.Mesh(armGeo, skinMat);
     armMeshL.position.y = -armHeight / 2;
     armMeshL.castShadow = true;
     shoulderL.add(armMeshL);
@@ -857,23 +864,27 @@ class SceneManager {
 
     const shoulderR = new THREE.Group();
     shoulderR.position.set(torsoW / 2 + armW / 2, shoulderY, 0);
-    const armMeshR = new THREE.Mesh(new THREE.BoxGeometry(armW, armHeight, armD), skinMat);
+    const armMeshR = new THREE.Mesh(armGeo, skinMat);
     armMeshR.position.y = -armHeight / 2;
     armMeshR.castShadow = true;
     shoulderR.add(armMeshR);
     group.add(shoulderR);
 
-    // Cabeza (con cara simple en la parte frontal)
-    const faceTexture = this._getFaceTexture(skinColor);
-    const headMaterials = [
-      skinMat, skinMat, skinMat, skinMat,
-      new THREE.MeshLambertMaterial({ map: faceTexture }),
-      skinMat
-    ];
-    const head = new THREE.Mesh(new THREE.BoxGeometry(headSize, headSize, headSize), headMaterials);
-    head.position.y = shoulderY + 0.05 + headSize / 2;
+    // Cabeza: esfera (redonda) con la cara como calcomanía plana al frente
+    // en vez de mapear la textura sobre una caja (evita el look "cúbico")
+    const headRadius = headSize / 2;
+    const head = new THREE.Mesh(new THREE.SphereGeometry(headRadius, 14, 12), skinMat);
+    head.position.y = shoulderY + 0.05 + headRadius;
     head.castShadow = true;
     group.add(head);
+
+    const faceTexture = this._getFaceTexture(skinColor);
+    const face = new THREE.Mesh(
+      new THREE.PlaneGeometry(headRadius * 1.1, headRadius * 1.1),
+      new THREE.MeshBasicMaterial({ map: faceTexture, transparent: true })
+    );
+    face.position.set(0, head.position.y, headRadius * 0.97);
+    group.add(face);
 
     // Vestuario distintivo por personaje
     this._applyOutfit(group, outfit, {
@@ -888,7 +899,7 @@ class SceneManager {
 
     return {
       mesh: group,
-      parts: { hipL, hipR, shoulderL, shoulderR }
+      parts: { hipL, hipR, shoulderL, shoulderR, armMeshR, heldWeapon: null }
     };
   }
 
@@ -896,7 +907,9 @@ class SceneManager {
     const { torsoW, torsoD, torsoHeight, legHeight, headSize, headY, shoulderY, shoulderL, shoulderR } = dims;
     const accent = outfit.accent ?? 0xffffff;
     const accentMat = new THREE.MeshLambertMaterial({ color: accent });
-    const torsoFrontZ = torsoD / 2 + 0.02;
+    // El torso ahora es un cilindro (radio promedio ~0.46*torsoW), no una caja
+    // de profundidad torsoD: los accesorios deben apoyarse sobre esa superficie.
+    const torsoFrontZ = torsoW * 0.46 + 0.02;
     const torsoCenterY = legHeight + torsoHeight / 2;
 
     switch (outfit.type) {
@@ -1068,6 +1081,98 @@ class SceneManager {
     return new THREE.Mesh(geometry, material);
   }
 
+  // ==========================================================
+  // ARMAS (tiradas en el mapa y sostenidas en la mano)
+  // ==========================================================
+
+  _createWeaponMesh(type) {
+    const group = new THREE.Group();
+
+    if (type === 'gun') {
+      const body = new THREE.Mesh(
+        new THREE.BoxGeometry(0.1, 0.12, 0.32),
+        new THREE.MeshLambertMaterial({ color: 0x2b2b2b })
+      );
+      body.position.z = 0.08;
+      group.add(body);
+
+      const grip = new THREE.Mesh(
+        new THREE.BoxGeometry(0.08, 0.2, 0.08),
+        new THREE.MeshLambertMaterial({ color: 0x1a1a1a })
+      );
+      grip.position.set(0, -0.14, -0.05);
+      group.add(grip);
+      return group;
+    }
+
+    // Cuchillo
+    const blade = new THREE.Mesh(
+      new THREE.BoxGeometry(0.04, 0.015, 0.28),
+      new THREE.MeshBasicMaterial({ color: 0xd8d8d8 })
+    );
+    blade.position.z = 0.14;
+    group.add(blade);
+
+    const handle = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.025, 0.025, 0.14, 6),
+      new THREE.MeshLambertMaterial({ color: 0x4a2f1a })
+    );
+    handle.rotation.x = Math.PI / 2;
+    handle.position.z = -0.05;
+    group.add(handle);
+    return group;
+  }
+
+  _attachHeldWeapon(model, weaponType) {
+    if (model.parts.heldWeapon) {
+      model.parts.armMeshR.remove(model.parts.heldWeapon);
+      model.parts.heldWeapon = null;
+    }
+    if (!weaponType) return;
+
+    const weaponMesh = this._createWeaponMesh(weaponType);
+    weaponMesh.position.set(0.02, -0.34, 0.08);
+    weaponMesh.rotation.x = -Math.PI / 6;
+    model.parts.armMeshR.add(weaponMesh);
+    model.parts.heldWeapon = weaponMesh;
+  }
+
+  setPlayerWeapon(playerId, weaponType) {
+    const model = this.playerModels[playerId];
+    if (model) this._attachHeldWeapon(model, weaponType);
+  }
+
+  setLocalPlayerWeapon(weaponType) {
+    if (this.localPlayerModel) this._attachHeldWeapon(this.localPlayerModel, weaponType);
+  }
+
+  setWeaponPickups(weapons) {
+    Object.values(this.weaponPickups).forEach(p => this.scene.remove(p.mesh));
+    this.weaponPickups = {};
+    weapons.forEach(w => this._addWeaponPickup(w));
+  }
+
+  _addWeaponPickup(weapon) {
+    const mesh = this._createWeaponMesh(weapon.type);
+    mesh.scale.set(2.4, 2.4, 2.4);
+    mesh.position.set(weapon.position.x, 0.6, weapon.position.z);
+    mesh.rotation.x = Math.PI / 2.5;
+    this.scene.add(mesh);
+    this.weaponPickups[weapon.id] = { mesh, data: weapon };
+  }
+
+  removeWeaponPickup(weaponId) {
+    const pickup = this.weaponPickups[weaponId];
+    if (pickup) {
+      this.scene.remove(pickup.mesh);
+      delete this.weaponPickups[weaponId];
+    }
+  }
+
+  getWeaponPickups() {
+    return Object.values(this.weaponPickups).map(p => p.data);
+  }
+
   addPlayer(playerId, player) {
     if (this.playerModels[playerId]) return; // Ya existe
 
@@ -1085,6 +1190,10 @@ class SceneManager {
       targetRotationY: 0,
       lastMoveTime: performance.now()
     };
+
+    if (player.weapon) {
+      this._attachHeldWeapon(this.playerModels[playerId], player.weapon);
+    }
   }
 
   updatePlayerPosition(playerId, position) {

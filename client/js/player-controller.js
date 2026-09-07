@@ -25,10 +25,12 @@ class PlayerController {
     this.gravity = -9.81;
     this.collisionRadius = 0.5;
     
-    // Cámara
+    // Cámara (estilo "over-the-shoulder" tipo GTA: detrás y a un costado,
+    // mirando un poco por delante del personaje en vez de centrada en él)
     this.cameraMode = 'third-person'; // 'first-person' o 'third-person'
-    this.cameraDistance = 5.5;
-    this.cameraHeight = 2.2;
+    this.cameraDistance = 4.5;
+    this.cameraHeight = 2;
+    this.shoulderOffset = 0.9;
     
     // Cooldowns
     this.lastAttackTime = 0;
@@ -128,8 +130,10 @@ class PlayerController {
     console.log(`📷 Vista: ${this.cameraMode}`);
   }
 
-  update(deltaTime, otherPlayers = [], paranoiaMultiplier = 1, colliders = []) {
+  update(deltaTime, otherPlayers = [], paranoiaMultiplier = 1, colliders = [], weaponType = 'punch') {
     if (!this.isLocked) return;
+
+    this.currentWeapon = weaponType;
     
     // Movimiento horizontal
     const forward = new THREE.Vector3();
@@ -138,15 +142,22 @@ class PlayerController {
     this.camera.getWorldDirection(forward);
     forward.y = 0;
     forward.normalize();
-    
-    right.crossVectors(this.camera.up, forward);
+
+    // right = forward × up (con up × forward se obtenía el vector hacia la
+    // IZQUIERDA, lo que hacía sentir el strafing invertido/errático)
+    right.crossVectors(forward, this.camera.up);
     right.normalize();
-    
+
     const moveVector = new THREE.Vector3();
-    
+
+    // Usar addScaledVector en vez de forward/right.multiplyScalar(-1): ese
+    // método mutaba el vector compartido, así que si se presionaban a la vez
+    // teclas opuestas (ej. A y D) el segundo chequeo operaba sobre el vector
+    // ya invertido por el primero, duplicando el desplazamiento en vez de
+    // cancelarlo — eso era el "se tilda y se mueve loco" en los costados.
     if (this.keys['w']) moveVector.add(forward);
-    if (this.keys['s']) moveVector.add(forward.multiplyScalar(-1));
-    if (this.keys['a']) moveVector.add(right.multiplyScalar(-1));
+    if (this.keys['s']) moveVector.addScaledVector(forward, -1);
+    if (this.keys['a']) moveVector.addScaledVector(right, -1);
     if (this.keys['d']) moveVector.add(right);
     
     // Aplicar paranoia zigzag
@@ -191,20 +202,28 @@ class PlayerController {
     if (this.cameraMode === 'first-person') {
       this.camera.position.copy(this.position);
     } else {
-      // Third person
-      const offset = new THREE.Vector3();
-      this.camera.getWorldDirection(offset);
-      offset.y = 0;
-      offset.normalize();
-      offset.multiplyScalar(-this.cameraDistance);
-      offset.y = this.cameraHeight;
-      
-      this.camera.position.lerp(
-        this.position.clone().add(offset),
-        0.1
-      );
-      
-      this.camera.lookAt(this.position);
+      // Tercera persona "over-the-shoulder" estilo GTA: la cámara queda
+      // detrás y desplazada a un costado del personaje (no centrada encima
+      // de él), y mira un punto un poco por delante en vez de al propio
+      // personaje, para que se sienta como apuntar sobre el hombro.
+      const camForward = new THREE.Vector3();
+      this.camera.getWorldDirection(camForward);
+      camForward.y = 0;
+      camForward.normalize();
+
+      const camRight = new THREE.Vector3().crossVectors(camForward, this.camera.up).normalize();
+
+      const desiredCamPos = this.position.clone()
+        .addScaledVector(camForward, -this.cameraDistance)
+        .addScaledVector(camRight, this.shoulderOffset);
+      desiredCamPos.y = this.position.y + this.cameraHeight;
+
+      this.camera.position.lerp(desiredCamPos, 0.15);
+
+      const lookTarget = this.position.clone()
+        .addScaledVector(camForward, 4)
+        .addScaledVector(camRight, this.shoulderOffset * 0.5);
+      this.camera.lookAt(lookTarget);
     }
     
     // Detectar clics (ataques)
@@ -221,24 +240,27 @@ class PlayerController {
     }
     
     this.lastAttackTime = now;
-    
+
+    // La pistola tiene alcance real (a distancia); puños/cuchillo son cuerpo a cuerpo
+    const range = this.currentWeapon === 'gun' ? 25 : 5;
+
     // Encontrar enemigo más cercano en rango
     let target = null;
-    let minDist = 5; // Rango máximo
-    
+    let minDist = range;
+
     for (const player of otherPlayers) {
       if (!player.isAlive) continue;
-      
+
       const dist = this.position.distanceTo(player.position);
       if (dist < minDist) {
         minDist = dist;
         target = player;
       }
     }
-    
+
     if (target) {
       console.log(`🔨 Atacando a ${target.username}`);
-      network.sendAttack(target.id, GAME_CONFIG.PUNCH_DAMAGE, WEAPON_TYPES.PUNCH);
+      network.sendAttack(target.id, GAME_CONFIG.PUNCH_DAMAGE, this.currentWeapon || WEAPON_TYPES.PUNCH);
     }
   }
 

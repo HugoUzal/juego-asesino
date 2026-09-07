@@ -22,6 +22,7 @@ class NetworkManager {
     this.socket.on('game-ended', (data) => this.onGameEnded(data));
     this.socket.on('you-killed-innocent', (data) => this.onYouKilledInnocent(data));
     this.socket.on('player-wounded', (data) => this.onPlayerWounded(data));
+    this.socket.on('weapon-picked-up', (data) => this.onWeaponPickedUp(data));
     this.socket.on('error', (data) => this.onError(data));
   }
 
@@ -48,6 +49,10 @@ class NetworkManager {
       damage: damage,
       weaponType: weaponType
     });
+  }
+
+  pickupWeapon(weaponId) {
+    this.socket.emit('pickup-weapon', { weaponId: weaponId });
   }
 
   sendChatMessage(message) {
@@ -87,12 +92,16 @@ class NetworkManager {
 
   onGameStarted(data) {
     console.log('🎬 ¡JUEGO INICIADO!');
-    const isAssassin = data.isAssassin ? data.isAssassin(this.playerId) : false;
-    
+    // El rol viene en la propia entrada del jugador dentro de "players"
+    // (nunca mandes funciones por el socket: no sobreviven la serialización JSON)
+    const me = (data.players || []).find(p => p.id === this.playerId);
+    const isAssassin = !!(me && me.isAssassin);
+
     if (this.callbacks.onGameStarted) {
       this.callbacks.onGameStarted({
         map: data.map,
         players: data.players,
+        weapons: data.weapons || [],
         isAssassin: isAssassin,
         playerId: this.playerId
       });
@@ -144,6 +153,13 @@ class NetworkManager {
     console.log(`🩹 Jugador herido: ${data.playerId}`);
     if (this.callbacks.onPlayerWounded) {
       this.callbacks.onPlayerWounded(data);
+    }
+  }
+
+  onWeaponPickedUp(data) {
+    console.log(`🔫 ${data.playerId} recogió ${data.weaponType}`);
+    if (this.callbacks.onWeaponPickedUp) {
+      this.callbacks.onWeaponPickedUp(data);
     }
   }
 

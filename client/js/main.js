@@ -26,11 +26,15 @@ class Game {
       playerCount: document.getElementById('player-count'),
       healthFill: document.getElementById('health-fill'),
       roleDisplay: document.getElementById('role-display'),
+      weaponDisplay: document.getElementById('weapon-display'),
+      ammoDisplay: document.getElementById('ammo-display'),
     };
-    
+
+    this.myWeapon = null;
+
     this.setupUI();
     this.setupNetworking();
-    
+
     // Game loop
     this.lastTime = Date.now();
     this.gameRunning = false;
@@ -78,6 +82,7 @@ class Game {
     network.on('onPlayerWounded', (data) => this.onPlayerWounded(data));
     network.on('onPlayerLeft', (data) => this.onPlayerLeft(data));
     network.on('onGameEnded', (data) => this.onGameEnded(data));
+    network.on('onWeaponPickedUp', (data) => this.onWeaponPickedUp(data));
   }
 
   joinGame() {
@@ -159,23 +164,26 @@ class Game {
     );
     
     // Inicializar escena 3D
-    this.initializeGame(data.map, data.players);
+    this.initializeGame(data.map, data.players, data.weapons || []);
   }
 
-  initializeGame(mapName, players) {
+  initializeGame(mapName, players, weapons = []) {
+    this.myWeapon = null;
+
     // Crear gestor de escena
     const container = document.body;
     this.sceneManager = new SceneManager(container);
     this.sceneManager.loadMap(mapName);
-    
+    this.sceneManager.setWeaponPickups(weapons);
+
     // Crear controlador del jugador
     const camera = this.sceneManager.getCamera();
     const renderer = this.sceneManager.getRenderer();
     this.playerController = new PlayerController(camera, renderer);
-    
+
     // Crear efectos de paranoia
     this.paranoiaEffects = new ParanoiaEffects(camera, renderer);
-    
+
     // Crear modelos para otros jugadores
     players.forEach(player => {
       if (player.id !== this.playerId) {
@@ -185,7 +193,7 @@ class Game {
         this.sceneManager.setLocalPlayer(player.character, player.username);
       }
     });
-    
+
     // Iniciar game loop
     this.gameRunning = true;
     this.gameLoop();
@@ -202,12 +210,16 @@ class Game {
     this.paranoiaEffects.update(deltaTime);
     const speedMult = this.paranoiaEffects.getSpeedMultiplier();
     
-    // Actualizar controlador
+    // Actualizar controlador (excluyendo al propio jugador de los posibles
+    // objetivos: si no, la distancia a uno mismo -0- siempre "gana" y todos
+    // los golpes terminaban aplicándose sobre uno mismo en vez del rival)
+    const otherPlayers = Object.values(this.players).filter(p => p.id !== this.playerId);
     this.playerController.update(
       deltaTime,
-      Object.values(this.players),
+      otherPlayers,
       speedMult,
-      this.sceneManager.getColliders()
+      this.sceneManager.getColliders(),
+      this.myWeapon || 'punch'
     );
 
     // Animar personajes (propio y remotos)
@@ -219,18 +231,65 @@ class Game {
       this.playerController.cameraMode
     );
 
+    // Recoger arma caminando encima
+    this.checkWeaponPickup();
+
     // Enviar posición
     const state = this.playerController.getState();
     network.sendMovement(state.position, state.rotation);
-    
+
     // Actualizar HUD
     this.updateHUD();
-    
+
     // Renderizar escena
     const camera = this.playerController.getCamera();
     this.sceneManager.render(camera);
-    
+
     requestAnimationFrame(() => this.gameLoop());
+  }
+
+  checkWeaponPickup() {
+    if (this.myWeapon) return; // ya está armado
+
+    const pos = this.playerController.position;
+    const pickups = this.sceneManager.getWeaponPickups();
+
+    for (const weapon of pickups) {
+      const dx = pos.x - weapon.position.x;
+      const dz = pos.z - weapon.position.z;
+      if (dx * dx + dz * dz < 2.5 * 2.5) {
+        network.pickupWeapon(weapon.id);
+        break;
+      }
+    }
+  }
+
+  onWeaponPickedUp(data) {
+    this.sceneManager.removeWeaponPickup(data.weaponId);
+
+    if (this.players[data.playerId]) {
+      this.players[data.playerId].weapon = data.weaponType;
+    }
+
+    if (data.playerId === this.playerId) {
+      this.myWeapon = data.weaponType;
+      this.sceneManager.setLocalPlayerWeapon(data.weaponType);
+
+      if (this.uiElements.weaponDisplay) {
+        this.uiElements.weaponDisplay.textContent = data.weaponType === 'gun' ? 'Pistola' : 'Cuchillo';
+      }
+      if (data.weaponType === 'gun' && this.uiElements.ammoDisplay) {
+        this.uiElements.ammoDisplay.textContent = '5';
+      }
+
+      this.hud.showNotification(
+        data.weaponType === 'gun' ? '🔫 Conseguiste una pistola' : '🔪 Conseguiste un cuchillo',
+        'info',
+        3000
+      );
+    } else if (this.sceneManager) {
+      this.sceneManager.setPlayerWeapon(data.playerId, data.weaponType);
+    }
   }
 
   updateHUD() {
@@ -270,14 +329,28 @@ class Game {
     if (data.victimId === this.playerId) {
       // Tú fuiste golpeado
       this.addScreenEffect('hit');
-      
+
       // Si estás herido
       if (data.isWounded) {
         console.log('🩹 Estás herido. Necesitas ayuda!');
         audio.playWoundSound();
       }
     }
-    
+
+    // Munición autoritativa del servidor: si te quedaste sin balas volvés a puños
+    if (data.attackerId === this.playerId && data.weaponType === 'gun') {
+      if (this.uiElements.ammoDisplay) {
+        this.uiElements.ammoDisplay.textContent = data.attackerAmmo ?? 0;
+      }
+      if ((data.attackerAmmo ?? 0) <= 0) {
+        this.myWeapon = null;
+        this.sceneManager.setLocalPlayerWeapon(null);
+        if (this.uiElements.weaponDisplay) {
+          this.uiElements.weaponDisplay.textContent = 'Puños';
+        }
+      }
+    }
+
     // Actualizar salud
     if (this.players[data.victimId]) {
       this.players[data.victimId].health = data.victimHealth;
