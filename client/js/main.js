@@ -203,7 +203,12 @@ class Game {
     const speedMult = this.paranoiaEffects.getSpeedMultiplier();
     
     // Actualizar controlador
-    this.playerController.update(deltaTime, Object.values(this.players), speedMult);
+    this.playerController.update(
+      deltaTime,
+      Object.values(this.players),
+      speedMult,
+      this.sceneManager.getColliders()
+    );
 
     // Animar personajes (propio y remotos)
     this.sceneManager.updateAnimations(deltaTime);

@@ -23,6 +23,7 @@ class PlayerController {
     this.canJump = false;
     this.jumpForce = 10;
     this.gravity = -9.81;
+    this.collisionRadius = 0.5;
     
     // Cámara
     this.cameraMode = 'third-person'; // 'first-person' o 'third-person'
@@ -127,7 +128,7 @@ class PlayerController {
     console.log(`📷 Vista: ${this.cameraMode}`);
   }
 
-  update(deltaTime, otherPlayers = [], paranoiaMultiplier = 1) {
+  update(deltaTime, otherPlayers = [], paranoiaMultiplier = 1, colliders = []) {
     if (!this.isLocked) return;
     
     // Movimiento horizontal
@@ -161,7 +162,14 @@ class PlayerController {
       moveVector.normalize();
       let currentSpeed = this.speed * paranoiaMultiplier;
       moveVector.multiplyScalar(currentSpeed * deltaTime);
-      this.position.add(moveVector);
+
+      const resolved = this._resolveCollision(
+        this.position.x + moveVector.x,
+        this.position.z + moveVector.z,
+        colliders
+      );
+      this.position.x = resolved.x;
+      this.position.z = resolved.z;
     }
     
     // Gravity
@@ -243,6 +251,26 @@ class PlayerController {
 
   isMoving() {
     return this.isLocked && (this.keys['w'] || this.keys['a'] || this.keys['s'] || this.keys['d']);
+  }
+
+  _collidesAt(x, z, colliders) {
+    const r = this.collisionRadius;
+    for (const c of colliders) {
+      if (Math.abs(x - c.x) < c.halfWidth + r && Math.abs(z - c.z) < c.halfDepth + r) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Resuelve colisiones deslizando contra la pared (solo X o solo Z)
+  // en vez de simplemente bloquear todo el movimiento.
+  _resolveCollision(newX, newZ, colliders) {
+    if (!colliders || colliders.length === 0) return { x: newX, z: newZ };
+    if (!this._collidesAt(newX, newZ, colliders)) return { x: newX, z: newZ };
+    if (!this._collidesAt(newX, this.position.z, colliders)) return { x: newX, z: this.position.z };
+    if (!this._collidesAt(this.position.x, newZ, colliders)) return { x: this.position.x, z: newZ };
+    return { x: this.position.x, z: this.position.z };
   }
 
   setPosition(pos) {

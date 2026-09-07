@@ -13,6 +13,7 @@ class SceneManager {
 
     this.EYE_HEIGHT = 1.6; // Debe coincidir con PlayerController
     this._textureCache = {};
+    this.colliders = []; // Cajas (AABB en XZ) de edificios/obstáculos sólidos
 
     this.setup();
   }
@@ -275,8 +276,23 @@ class SceneManager {
     this.scene.add(ground);
   }
 
+  _addCollider(x, z, halfWidth, halfDepth) {
+    this.colliders.push({ x, z, halfWidth, halfDepth });
+  }
+
+  _isInsideAnyCollider(x, z, margin = 0) {
+    return this.colliders.some(c =>
+      Math.abs(x - c.x) < c.halfWidth + margin && Math.abs(z - c.z) < c.halfDepth + margin
+    );
+  }
+
+  getColliders() {
+    return this.colliders;
+  }
+
   loadMap(mapName) {
     this.currentMap = mapName;
+    this.colliders = [];
     const mapData = GAME_CONFIG.MAPS[mapName];
 
     console.log(`🗺️ Cargando mapa: ${mapData.name}`);
@@ -317,6 +333,7 @@ class SceneManager {
       building.castShadow = true;
       building.receiveShadow = true;
       this.scene.add(building);
+      this._addCollider(x, z, width / 2, depth / 2);
 
       // Añadir algunas luces internas
       const windowLight = new THREE.PointLight(0xffff99, 0.3, 30);
@@ -354,12 +371,17 @@ class SceneManager {
       shop.castShadow = true;
       shop.receiveShadow = true;
       this.scene.add(shop);
+      this._addCollider(shop.position.x, shop.position.z, 5, 5);
     }
 
-    // Puntos de cobertura (árboles con tronco)
+    // Puntos de cobertura (árboles con tronco) — evitando que caigan sobre edificios/tiendas
     for (let i = 0; i < 5; i++) {
-      const x = -40 + Math.random() * 80;
-      const z = -40 + Math.random() * 80;
+      let x, z, attempts = 0;
+      do {
+        x = -40 + Math.random() * 80;
+        z = -40 + Math.random() * 80;
+        attempts++;
+      } while (this._isInsideAnyCollider(x, z, 3) && attempts < 20);
 
       const trunkGeometry = new THREE.CylinderGeometry(1, 1.3, 4, 8);
       const trunkMaterial = new THREE.MeshLambertMaterial({ color: 0x5a3d24 });
@@ -387,6 +409,7 @@ class SceneManager {
     base.castShadow = true;
     base.receiveShadow = true;
     this.scene.add(base);
+    this._addCollider(0, 0, 18, 18);
 
     // Estructura central tipo domo (mosaico de azulejos)
     const tile = this._tileTexture(this._getTileTexture(0x2f6fbf, 0xeaf2fb), 8, 8);
@@ -428,6 +451,7 @@ class SceneManager {
       building.castShadow = true;
       building.receiveShadow = true;
       this.scene.add(building);
+      this._addCollider(building.position.x, building.position.z, 7.5, 7.5);
     }
   }
 
@@ -453,6 +477,14 @@ class SceneManager {
       this.scene.add(wall);
     });
 
+    // Colliders de los muros (medio ancho/profundidad según su rotación),
+    // dejando un hueco en el muro frontal para la puerta
+    this._addCollider(-27, -50, 23, 2);
+    this._addCollider(27, -50, 23, 2);
+    this._addCollider(0, 50, 50, 2);
+    this._addCollider(-50, 0, 2, 50);
+    this._addCollider(50, 0, 2, 50);
+
     // Torres en las esquinas
     const towerStone = this._tileTexture(this._getBrickTexture(0x5a5a5a, 0x3a3a3a), 6, 5);
     const towers = [
@@ -469,6 +501,7 @@ class SceneManager {
       tower.position.set(...t.pos);
       tower.castShadow = true;
       this.scene.add(tower);
+      this._addCollider(t.pos[0], t.pos[2], 10, 10);
 
       // Techo cónico
       const roofGeometry = new THREE.ConeGeometry(10, 8, 16);
@@ -486,6 +519,7 @@ class SceneManager {
     mainTower.position.y = 25;
     mainTower.castShadow = true;
     this.scene.add(mainTower);
+    this._addCollider(0, 0, 15, 15);
 
     // Bandera en la torre
     const flagGeometry = new THREE.PlaneGeometry(8, 6);
@@ -539,6 +573,7 @@ class SceneManager {
         house.castShadow = true;
         house.receiveShadow = true;
         this.scene.add(house);
+        this._addCollider(posX, posZ, 6, 6);
 
         // Techo rojo
         const roofGeometry = new THREE.ConeGeometry(9, 4, 4);
@@ -762,7 +797,10 @@ class SceneManager {
 
     this.localPlayerModel.mesh.visible = cameraMode === 'third-person';
     this.localPlayerModel.mesh.position.set(position.x, position.y - this.EYE_HEIGHT, position.z);
-    this.localPlayerModel.targetRotationY = rotationY;
+    // La cámara "mira" hacia -Z local a rotación 0, mientras que la cara del
+    // personaje está pintada en +Z local: hay que sumar 180° para que la cara
+    // apunte hacia donde mira la cámara (si no, se ve la cara en la nuca).
+    this.localPlayerModel.targetRotationY = rotationY + Math.PI;
     this.localPlayerModel.isMoving = isMoving;
   }
 
